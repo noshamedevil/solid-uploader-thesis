@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Solid File Uploader</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      background: #f9f9f9;
+      padding: 20px;
+      border-radius: 8px;
+    }
+
+    h2, h3 {
+      margin-bottom: 10px;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    button {
+      margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Upload to Solid Pod</h2>
+  <form id="upload-form">
+    <input type="file" id="fileInput" />
+    <button type="submit">Upload</button>
+  </form>
+
+  <h3>Uploaded Files</h3>
+  <ul id="file-list"></ul>
+
+  <script type="module">
+    const form = document.getElementById("upload-form");
+    const fileList = document.getElementById("file-list");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const file = document.getElementById("fileInput").files[0];
+      if (!file) {
+        alert("Please choose a file first.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await fetch("/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const result = await res.json();
+        alert(result.message || "✅ Upload complete");
+
+        // Show uploaded file immediately
+        const url = result.url;
+        const fileName = decodeURIComponent(url.split("/").pop());
+
+        const li = document.createElement("li");
+
+        const link = document.createElement("a");
+        link.href = url;
+        link.target = "_blank";
+        link.textContent = fileName;
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "🗑️ Delete";
+        deleteBtn.onclick = async () => {
+          if (confirm(`Delete "${fileName}" from your Solid Pod?`)) {
+            const res = await fetch(`/file?url=${encodeURIComponent(url)}`, {
+              method: "DELETE",
+            });
+            const msg = await res.text();
+            alert(msg);
+            li.remove(); // remove from UI
+          }
+        };
+
+        li.appendChild(link);
+        li.appendChild(deleteBtn);
+        fileList.appendChild(li);
+      } catch (err) {
+        alert("Upload failed: " + err.message);
+      }
+    });
+
+    async function loadFileList() {
+      try {
+        const res = await fetch("/files");
+        const files = await res.json();
+        fileList.innerHTML = "";
+        files.forEach(url => {
+          const fileName = decodeURIComponent(url.split("/").pop());
+          const li = document.createElement("li");
+
+          const link = document.createElement("a");
+          link.href = url;
+          link.target = "_blank";
+          link.textContent = fileName;
+
+          const copyBtn = document.createElement("button");
+          copyBtn.textContent = "🔗 Copy Link";
+          copyBtn.onclick = () => {
+            navigator.clipboard.writeText(url);
+            alert("🔗 Link copied to clipboard!");
+          };
+
+          const deleteBtn = document.createElement("button");
+          deleteBtn.textContent = "🗑️ Delete";
+          deleteBtn.onclick = async () => {
+            if (confirm(`Are you sure you want to delete "${fileName}"?`)) {
+              const res = await fetch(`/file?url=${encodeURIComponent(url)}`, {
+                method: "DELETE",
+              });
+              const msg = await res.text();
+              alert(msg);
+              loadFileList();
+            }
+          };
+
+          li.appendChild(link);
+          li.appendChild(copyBtn);
+          li.appendChild(deleteBtn);
+          fileList.appendChild(li);
+        });
+      } catch (err) {
+        console.error("Failed to load file list:", err);
+      }
+    }
+
+    loadFileList();
+  </script>
+</body>
+</html>
