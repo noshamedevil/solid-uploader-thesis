@@ -55,15 +55,20 @@ app.post("/upload", async (req, res) => {
     await file.mv(rawPath);
     console.log(`📥 Raw file saved at ${rawPath}`);
 
+    // Redact and upload
+    const redactedBuffer = await processAndBlur(rawPath);
+
     // Encrypt and store raw
     const encryptedPath = rawPath + ".enc";
     await encryptFile(rawPath, encryptedPath);
     console.log(`🔐 Encrypted raw stored at ${encryptedPath}`);
 
-    // Redact and upload
-    const redactedBuffer = await processAndBlur(rawPath);
-    const remoteUrl = new URL(fileName, podFolder).href;
+    // Delete unencrypted raw file
+    fs.unlinkSync(rawPath);
+    console.log("🧹 Raw unencrypted file deleted");
 
+    // Upload redacted version to Solid Pod
+    const remoteUrl = new URL(fileName, podFolder).href;
     await overwriteFile(remoteUrl, redactedBuffer, {
       contentType: file.mimetype || "application/octet-stream",
       fetch: session.fetch,
@@ -76,7 +81,6 @@ app.post("/upload", async (req, res) => {
   }
 });
 
-// Secure viewing route
 app.get("/view", async (req, res) => {
   const fileParam = req.query.file;
   if (!fileParam) return res.status(400).send("Missing file parameter");

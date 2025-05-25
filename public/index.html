@@ -64,7 +64,6 @@
         const result = await res.json();
         alert(result.message || "✅ Upload complete");
 
-        // Show uploaded file immediately
         const url = result.url;
         const fileName = decodeURIComponent(url.split("/").pop());
 
@@ -74,6 +73,22 @@
         link.href = url;
         link.target = "_blank";
         link.textContent = fileName;
+
+        const copyViewLinkBtn = document.createElement("button");
+        copyViewLinkBtn.textContent = "🔐 Copy Original Link";
+        copyViewLinkBtn.onclick = () => {
+          const encryptedName = fileName + ".enc";
+          const viewLink = `${location.origin}/view?file=${encodeURIComponent(encryptedName)}`;
+          navigator.clipboard.writeText(viewLink);
+          alert("🔐 Original view link copied to clipboard!");
+        };
+
+        const copyBtn = document.createElement("button");
+        copyBtn.textContent = "🔗 Copy Link";
+        copyBtn.onclick = () => {
+          navigator.clipboard.writeText(url);
+          alert("🔗 Link copied to clipboard!");
+        };
 
         const deleteBtn = document.createElement("button");
         deleteBtn.textContent = "🗑️ Delete";
@@ -89,6 +104,8 @@
         };
 
         li.appendChild(link);
+        li.appendChild(copyViewLinkBtn);
+        li.appendChild(copyBtn);
         li.appendChild(deleteBtn);
         fileList.appendChild(li);
       } catch (err) {
@@ -109,6 +126,15 @@
           link.href = url;
           link.target = "_blank";
           link.textContent = fileName;
+
+          const copyViewLinkBtn = document.createElement("button");
+          copyViewLinkBtn.textContent = "🔐 Copy Original Link";
+          copyViewLinkBtn.onclick = () => {
+            const encryptedName = fileName + ".enc";
+            const viewLink = `${location.origin}/view?file=${encodeURIComponent(encryptedName)}`;
+            navigator.clipboard.writeText(viewLink);
+            alert("🔐 Original view link copied to clipboard!");
+          };
 
           const copyBtn = document.createElement("button");
           copyBtn.textContent = "🔗 Copy Link";
@@ -131,6 +157,7 @@
           };
 
           li.appendChild(link);
+          li.appendChild(copyViewLinkBtn);
           li.appendChild(copyBtn);
           li.appendChild(deleteBtn);
           fileList.appendChild(li);
