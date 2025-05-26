@@ -146,6 +146,8 @@ app.get("/view", async (req, res) => {
   }
 });
 
+// ✅ Updated: fallback to session.fetch (solid-auth fetch)
+
 app.delete("/file", async (req, res) => {
   const url = req.query.url;
   const user = req.session.user;
@@ -168,15 +170,16 @@ app.delete("/file", async (req, res) => {
     const encryptedCopy = getStringNoLocale(thing, "http://schema.org/encryptedCopy");
 
     if (encryptedCopy) {
-      const encPath = path.join(rawDir, encryptedCopy);
+      const encPath = path.join("uploads/raw", encryptedCopy);
       if (fs.existsSync(encPath)) fs.unlinkSync(encPath);
     }
 
     const deleteFromPod = async (targetUrl) => {
-      await fetch(targetUrl, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${session.info.sessionId}` }
-      });
+      const response = await session.fetch(targetUrl, { method: "DELETE" });
+      if (!response.ok) {
+        console.error(`❌ Failed to delete ${targetUrl}:`, response.status, await response.text());
+        throw new Error(`Failed to delete ${targetUrl}`);
+      }
     };
 
     await deleteFromPod(url);
@@ -188,6 +191,7 @@ app.delete("/file", async (req, res) => {
     res.status(500).send("Failed to delete file or metadata.");
   }
 });
+
 
 app.listen(3001, () => {
   console.log("🚀 Upload server listening at http://localhost:3001");
