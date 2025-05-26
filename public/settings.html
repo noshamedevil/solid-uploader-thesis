@@ -1,64 +1,112 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>User Settings</title>
+  <title>Account Settings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body {
-      font-family: sans-serif;
-      max-width: 600px;
-      margin: 40px auto;
-      background: #f9f9f9;
-      padding: 20px;
-      border-radius: 8px;
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f0f2f5;
     }
 
-    input, button {
-      display: block;
+    .container {
+      max-width: 500px;
+      margin: 2em auto;
+      background: white;
+      padding: 2em;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.05);
+    }
+
+    h2 {
+      margin-top: 0;
+      color: #1d3557;
+    }
+
+    input {
       width: 100%;
-      margin: 10px 0;
-      padding: 10px;
+      padding: 0.75em;
+      margin-bottom: 1em;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 1rem;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.75em;
+      background: #457b9d;
+      color: white;
+      font-size: 1rem;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    a {
+      display: inline-block;
+      margin-top: 1em;
+      text-decoration: none;
+      color: #2a9d8f;
+    }
+
+    .status {
+      font-size: 0.95rem;
+      margin-bottom: 1em;
+      color: #555;
     }
   </style>
 </head>
 <body>
-  <h2>User Settings</h2>
-  <form id="settings-form">
-    <input type="text" name="clientId" placeholder="Solid Client ID" required />
-    <input type="text" name="clientSecret" placeholder="Client Secret" required />
-    <input type="text" name="oidcIssuer" placeholder="OIDC Issuer" required />
-    <input type="text" name="targetPod" placeholder="Target Pod Folder URL" required />
-    <button type="submit">Update Settings</button>
-  </form>
+  <div class="container">
+    <h2>Account Settings</h2>
 
-  <p><a href="/">⬅ Back to Uploader</a></p>
+    <form id="settings-form">
+      <input type="text" name="clientId" placeholder="Solid Client ID" required />
+      <input type="text" name="clientSecret" placeholder="Client Secret" required />
+      <input type="text" name="oidcIssuer" placeholder="OIDC Issuer" required />
+      <input type="text" name="targetPod" placeholder="Target Pod Folder URL" required />
+      <button type="submit">Update Settings</button>
+    </form>
+
+    <a href="/">← Back to Uploader</a>
+  </div>
 
   <script>
+    const form = document.getElementById("settings-form");
+    const status = document.getElementById("status");
+
     async function loadSettings() {
       try {
         const res = await fetch("/settings");
+        if (!res.ok) throw new Error("Not logged in");
         const data = await res.json();
-        const form = document.getElementById("settings-form");
         form.clientId.value = data.clientId;
         form.clientSecret.value = data.clientSecret;
         form.oidcIssuer.value = data.oidcIssuer;
         form.targetPod.value = data.targetPod;
       } catch {
-        alert("🔒 Not logged in. Redirecting...");
-        window.location = "/login.html";
+        status.textContent = "⚠️ Not logged in. Redirecting...";
+        setTimeout(() => window.location = "/login.html", 1500);
       }
     }
 
-    document.getElementById("settings-form").onsubmit = async (e) => {
+    form.onsubmit = async (e) => {
       e.preventDefault();
-      const form = e.target;
       const data = Object.fromEntries(new FormData(form));
-      const res = await fetch("/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      const msg = await res.text();
-      alert(msg);
+      try {
+        const res = await fetch("/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data)
+        });
+        const msg = await res.text();
+        alert(msg);
+      } catch {
+        alert("Failed to update settings.");
+      }
     };
 
     loadSettings();

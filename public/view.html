@@ -1,37 +1,110 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>View Secure File</title>
+  <title>View Document</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body {
-      font-family: sans-serif;
-      padding: 2em;
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f0f2f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    .viewer {
+      max-width: 90%;
+      max-height: 90vh;
+      background: white;
+      padding: 1em;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.1);
       text-align: center;
     }
-    img, iframe {
-      max-width: 90%;
+
+    h2 {
+      margin-bottom: 0.5em;
+      color: #1d3557;
+    }
+
+    .info {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 1em;
+    }
+
+    iframe {
+      width: 100%;
+      height: 80vh;
+      border: none;
+      border-radius: 5px;
+    }
+
+    .img-wrapper {
+      position: relative;
+      display: inline-block;
+      width: 100%;
+    }
+
+    .img-wrapper img {
+      display: block;
+      width: 100%;
       height: auto;
-      border: 1px solid #ccc;
-      margin-top: 20px;
+      border-radius: 5px;
+    }
+
+    .img-wrapper .overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: transparent;
+      z-index: 2;
     }
   </style>
+  <script>
+    document.addEventListener("contextmenu", (e) => e.preventDefault());
+  </script>
 </head>
 <body>
-  <h2>Decrypted File Preview</h2>
-  <input id="linkInput" placeholder="Paste view link here..." style="width: 80%;" />
-  <button onclick="loadFile()">🔓 View</button>
-
-  <div id="viewer"></div>
+  <div class="viewer">
+    <h2>Secure Document Viewer</h2>
+    <div class="info">Right-click has been disabled for privacy protection.</div>
+    <div id="content">Loading...</div>
+  </div>
 
   <script>
-    function loadFile() {
-      const fileUrl = document.getElementById("linkInput").value;
-      const viewer = document.getElementById("viewer");
+    const urlParams = new URLSearchParams(window.location.search);
+    const fileParam = urlParams.get("file");
+    const container = document.getElementById("content");
 
-      if (fileUrl.endsWith(".pdf.enc")) {
-        viewer.innerHTML = `<iframe src="${fileUrl}" width="100%" height="600px"></iframe>`;
+    if (!fileParam) {
+      container.innerHTML = "<p>❌ No file specified.</p>";
+    } else {
+      const viewURL = `/view?file=${encodeURIComponent(fileParam)}`;
+
+      if (fileParam.endsWith(".pdf.enc")) {
+        const iframe = document.createElement("iframe");
+        iframe.src = viewURL;
+        container.innerHTML = "";
+        container.appendChild(iframe);
       } else {
-        viewer.innerHTML = `<img src="${fileUrl}" />`;
+        const wrapper = document.createElement("div");
+        wrapper.className = "img-wrapper";
+
+        const img = document.createElement("img");
+        img.src = viewURL;
+        img.alt = "Secure Image";
+
+        const overlay = document.createElement("div");
+        overlay.className = "overlay";
+        overlay.oncontextmenu = () => false;
+
+        wrapper.append(img, overlay);
+        container.innerHTML = "";
+        container.appendChild(wrapper);
       }
     }
   </script>
