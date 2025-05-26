@@ -1,85 +1,88 @@
 import vision from '@google-cloud/vision';
 import sharp from 'sharp';
 
+const client = new vision.ImageAnnotatorClient();
+
 const regexes = {
-  dob: /\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}-\d{1,2}-\d{1,2})\b/,
-  mrz: /^P<|^[A-Z0-9<]{25,}$/
+  dob: /\b\d{1,2}[ /-]\d{1,2}[ /-]\d{2,4}\b/g, // more flexible, catches "06 09 2001"
+  fullName: /^[A-Z][a-z]+\s+[A-Z][a-z]+$/,
+  allCapsName: /^[A-Z\s]{5,}$/,
 };
 
 const preservedLabels = [
-  "ID", "Number", "Passport", "Country", "Nationality",
-  "India", "Republic", "Issued", "Name"
+  "passport", "id", "document", "number", "issued", "nationality", "country", "type", "permit"
 ];
 
-const client = new vision.ImageAnnotatorClient();
+const nameLabels = ["name", "voornaam", "surname", "given", "naam"];
+const dobLabels = ["birth", "geboorte", "dob", "geboortedatum", "date of birth"];
 
-export async function processAndBlur(filePath, outputPath) {
+export async function processAndBlur(filePath) {
   console.log("📥 Starting redaction for:", filePath);
 
   const [result] = await client.documentTextDetection(filePath);
-  const annotations = result.fullTextAnnotation;
+  const annotation = result.fullTextAnnotation;
 
-  if (!annotations || !annotations.pages) {
+  if (!annotation || !annotation.pages) {
     console.log("⚠️ No OCR results found.");
-    return;
+    return null;
   }
 
-  const text = annotations.text || "";
-  console.log("🔤 Extracted Text:\n", text.trim());
+  const allText = annotation.text || "";
+  console.log("🔤 Extracted Text:\n", allText);
 
-  // 🔍 Auto-detect names by scanning lines after known labels
-  const possibleNames = [];
-  const lines = text.split(/\n+/);
-  for (let i = 0; i < lines.length; i++) {
-    const lower = lines[i].toLowerCase();
-    if (
-      lower.includes("name") ||
-      lower.includes("given") ||
-      lower.includes("surname")
-    ) {
-      for (let j = 1; j <= 5; j++) {
-        const candidate = lines[i + j]?.trim();
-        if (candidate && /^[A-Z\s]+$/.test(candidate)) {
-          possibleNames.push(
-            ...candidate.split(/\s+/).map(p => p.trim().toLowerCase())
-          );
+  const lines = allText.split(/\n+/);
+  const possibleNames = new Set();
+
+  lines.forEach((line, idx) => {
+    const lower = line.toLowerCase();
+    if (nameLabels.some(lbl => lower.includes(lbl))) {
+      for (let j = 1; j <= 10 && lines[idx + j]; j++) {
+        const next = lines[idx + j].trim();
+        if (regexes.fullName.test(next) || regexes.allCapsName.test(next)) {
+          next.split(/\s+/).forEach(part => possibleNames.add(part.toLowerCase()));
         }
       }
     }
-  }
+  });
 
-  console.log("🧠 Auto-detected names:", possibleNames.join(", "));
+  console.log("🧠 Auto-detected name tokens:", [...possibleNames].join(", "));
 
   const blurBoxes = [];
 
-  annotations.pages.forEach(page => {
+  annotation.pages.forEach(page => {
     page.blocks.forEach(block => {
       block.paragraphs.forEach(paragraph => {
         const words = paragraph.words;
+        const wordList = words.map(w => w.symbols.map(s => s.text).join("").trim());
+        const joined = wordList.join(" ");
 
-        words.forEach((word) => {
-          const text = word.symbols.map(s => s.text).join('').trim();
+        const dobMatches = [...joined.matchAll(regexes.dob)].map(m => m[0]);
 
-          const isDOB = regexes.dob.test(text);
-          const isName = possibleNames.includes(text.toLowerCase());
-          const isMRZ = regexes.mrz.test(text);
+        // loop through words
+        for (let i = 0; i < wordList.length; i++) {
+          const text = wordList[i];
+          const lower = text.toLowerCase();
+          const word = words[i];
 
-          const isSensitive = isDOB || isName || isMRZ;
-          const isPreserved = preservedLabels.some(label =>
-            text.toLowerCase().includes(label.toLowerCase())
+          const isName = possibleNames.has(lower);
+          const isSuspectName = regexes.fullName.test(text) || regexes.allCapsName.test(text);
+          const isPreserved = preservedLabels.some(label => lower.includes(label));
+          const isSensitiveName = (isName || isSuspectName) && !isPreserved;
+
+          const isPartOfDOB = dobMatches.some(match =>
+            match.includes(text) || match.includes(text.replace(/[^0-9]/g, ""))
           );
 
-          if (isSensitive && !isPreserved) {
+          if (isSensitiveName || isPartOfDOB) {
             const vertices = word.boundingBox.vertices;
             const x0 = Math.min(...vertices.map(v => v.x || 0));
             const y0 = Math.min(...vertices.map(v => v.y || 0));
             const x1 = Math.max(...vertices.map(v => v.x || 0));
             const y1 = Math.max(...vertices.map(v => v.y || 0));
-
             blurBoxes.push({ x0, y0, x1, y1 });
             console.log(`🔒 Redacting: "${text}" at [${x0},${y0}] to [${x1},${y1}]`);
           }
-        });
+        }
       });
     });
   });
@@ -90,11 +93,9 @@ export async function processAndBlur(filePath, outputPath) {
   }
 
   const overlays = [];
-
   for (const { x0, y0, x1, y1 } of blurBoxes) {
     const width = x1 - x0;
     const height = y1 - y0;
-
     const blurOverlay = await sharp({
       create: {
         width,
