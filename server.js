@@ -29,6 +29,18 @@ app.use(session({
 
 app.use(authRoutes);
 
+// Protect root: redirect if not logged in
+app.get("/", (req, res, next) => {
+  if (!req.session.user) return res.redirect("/login.html");
+  next();
+});
+
+// User info for UI
+app.get("/me", (req, res) => {
+  if (!req.session.user) return res.status(401).send("Unauthorized");
+  res.json({ email: req.session.user.email });
+});
+
 const uploadsDir = path.join(__dirname, "uploads");
 const rawDir = path.join(uploadsDir, "raw");
 [uploadsDir, rawDir].forEach(dir => {
@@ -60,7 +72,6 @@ app.post("/upload", async (req, res) => {
     fs.unlinkSync(rawPath);
     console.log("🧹 Raw unencrypted file deleted");
 
-    // Login to the user's Solid Pod dynamically
     const session = new Session();
     await session.login({
       clientId: user.clientId,

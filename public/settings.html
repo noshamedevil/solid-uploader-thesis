@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>User Settings</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      background: #f9f9f9;
+      padding: 20px;
+      border-radius: 8px;
+    }
+
+    input, button {
+      display: block;
+      width: 100%;
+      margin: 10px 0;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h2>User Settings</h2>
+  <form id="settings-form">
+    <input type="text" name="clientId" placeholder="Solid Client ID" required />
+    <input type="text" name="clientSecret" placeholder="Client Secret" required />
+    <input type="text" name="oidcIssuer" placeholder="OIDC Issuer" required />
+    <input type="text" name="targetPod" placeholder="Target Pod Folder URL" required />
+    <button type="submit">Update Settings</button>
+  </form>
+
+  <p><a href="/">⬅ Back to Uploader</a></p>
+
+  <script>
+    async function loadSettings() {
+      try {
+        const res = await fetch("/settings");
+        const data = await res.json();
+        const form = document.getElementById("settings-form");
+        form.clientId.value = data.clientId;
+        form.clientSecret.value = data.clientSecret;
+        form.oidcIssuer.value = data.oidcIssuer;
+        form.targetPod.value = data.targetPod;
+      } catch {
+        alert("🔒 Not logged in. Redirecting...");
+        window.location = "/login.html";
+      }
+    }
+
+    document.getElementById("settings-form").onsubmit = async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const data = Object.fromEntries(new FormData(form));
+      const res = await fetch("/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const msg = await res.text();
+      alert(msg);
+    };
+
+    loadSettings();
+  </script>
+</body>
+</html>

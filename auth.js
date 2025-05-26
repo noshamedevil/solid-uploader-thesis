@@ -95,5 +95,42 @@ router.get("/logout", (req, res) => {
     res.send("✅ Logged out.");
   });
 });
+// GET /settings — fetch current user's Solid credentials
+router.get("/settings", async (req, res) => {
+  if (!req.session.user) return res.status(401).send("Unauthorized");
+
+  const users = JSON.parse(await fs.readFile(USERS_FILE, "utf8"));
+  const current = users.find(u => u.email === req.session.user.email);
+
+  if (!current) return res.status(404).send("User not found");
+
+  res.json({
+    clientId: current.clientId,
+    clientSecret: decryptSecret(current.clientSecret),
+    oidcIssuer: current.oidcIssuer,
+    targetPod: current.targetPod
+  });
+});
+
+// POST /settings — update stored Solid credentials
+router.post("/settings", async (req, res) => {
+  if (!req.session.user) return res.status(401).send("Unauthorized");
+
+  const { clientId, clientSecret, oidcIssuer, targetPod } = req.body;
+  const users = JSON.parse(await fs.readFile(USERS_FILE, "utf8"));
+  const user = users.find(u => u.email === req.session.user.email);
+
+  if (!user) return res.status(404).send("User not found");
+
+  user.clientId = clientId;
+  user.clientSecret = encryptSecret(clientSecret);
+  user.oidcIssuer = oidcIssuer;
+  user.targetPod = targetPod;
+
+  await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
+  req.session.user = { email: user.email, clientId, clientSecret, oidcIssuer, targetPod };
+
+  res.send("✅ Settings updated.");
+});
 
 export default router;
