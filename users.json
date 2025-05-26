@@ -1,0 +1,14 @@
+[
+  {
+    "email": "pandeynimish2001@gmail.com",
+    "password": "$2b$10$m3jPEEtgwYQk9lpirzmMUeKdD0IiVURZJMkWSWswb9W8f9xkRYA2q",
+    "clientId": "refugee-pod-app_7846a959-65e1-4029-9b0e-63863d23bba2",
+    "clientSecret": {
+      "iv": "dbbf6a1cd0968c1fbc409495",
+      "tag": "60547c08ddc3ef0905fae415ec2f569e",
+      "data": "bf480c88643c85790199cd45a4a0ef8586ae4be4a411fcd23ae7b4a445c732987a9d8788fda0766e4ec9b481d6440d3fcd4365d4c6d59fbfc331b91b005f15a35e1d9ef2ea6bf184c73fe2cd28370147bbf9eb310fb382c53eb7ffc1fbb1d1f71a1474bc4dbb9e83229f6bb39d61367b4e006ee8a50fa85a1e2ff3a02fb3f075"
+    },
+    "oidcIssuer": "https://solidcommunity.net",
+    "targetPod": "https://refugee-pod.solidcommunity.net/public/"
+  }
+]

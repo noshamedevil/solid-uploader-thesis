@@ -10,6 +10,7 @@ import { processAndBlur } from "./ocrProcess.js";
 import { encryptFile, decryptFileToBuffer } from "./encryption.js";
 import authRoutes from "./auth.js";
 import { Session } from "@inrupt/solid-client-authn-node";
+import fetch from "node-fetch"; // Required for manual pod deletion
 
 dotenv.config();
 
@@ -29,16 +30,25 @@ app.use(session({
 
 app.use(authRoutes);
 
-// Protect root: redirect if not logged in
 app.get("/", (req, res, next) => {
   if (!req.session.user) return res.redirect("/login.html");
   next();
 });
 
-// User info for UI
 app.get("/me", (req, res) => {
   if (!req.session.user) return res.status(401).send("Unauthorized");
   res.json({ email: req.session.user.email });
+});
+
+app.get("/logout", (req, res) => {
+  req.session.destroy(err => {
+    if (err) {
+      console.error("Logout error:", err);
+      return res.status(500).send("Logout failed.");
+    }
+    res.clearCookie("connect.sid");
+    res.send("✅ Logged out.");
+  });
 });
 
 const uploadsDir = path.join(__dirname, "uploads");
@@ -113,6 +123,44 @@ app.get("/view", async (req, res) => {
   } catch (err) {
     console.error("❌ Failed to decrypt:", err.message);
     res.status(500).send("Decryption failed or file not found.");
+  }
+});
+
+// 🔥 DELETE /file — delete Pod + encrypted version
+app.delete("/file", async (req, res) => {
+  const url = req.query.url;
+  if (!url || !req.session.user) return res.status(400).send("Missing URL or not logged in");
+
+  try {
+    const fileName = decodeURIComponent(url.split("/").pop());
+    const encPath = path.join(__dirname, "uploads/raw", fileName + ".enc");
+    const metaPath = encPath + ".meta.json";
+
+    if (fs.existsSync(encPath)) fs.unlinkSync(encPath);
+    if (fs.existsSync(metaPath)) fs.unlinkSync(metaPath);
+    console.log("🧹 Deleted encrypted + metadata:", fileName);
+
+    const podFolder = req.session.user.targetPod.endsWith("/")
+      ? req.session.user.targetPod
+      : req.session.user.targetPod + "/";
+    const podFileUrl = new URL(fileName, podFolder).href;
+
+    const session = new Session();
+    await session.login({
+      clientId: req.session.user.clientId,
+      clientSecret: req.session.user.clientSecret,
+      oidcIssuer: req.session.user.oidcIssuer,
+    });
+
+    await fetch(podFileUrl, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.info.sessionId}` }
+    });
+
+    res.send("✅ File deleted from server and Solid Pod.");
+  } catch (err) {
+    console.error("❌ Deletion error:", err.message);
+    res.status(500).send("Failed to delete file.");
   }
 });
 
