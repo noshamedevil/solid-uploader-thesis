@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Sign Up – Solid File Uploader</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; background: #f9f9f9; padding: 20px; border-radius: 8px; }
+    input, button { display: block; width: 100%; margin: 10px 0; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Create Account</h2>
+  <form id="signup-form">
+    <input type="email" name="email" placeholder="Email" required />
+    <input type="password" name="password" placeholder="Password" required />
+    <input type="text" name="clientId" placeholder="Solid Client ID" required />
+    <input type="text" name="clientSecret" placeholder="Solid Client Secret" required />
+    <input type="text" name="oidcIssuer" placeholder="OIDC Issuer" required />
+    <input type="text" name="targetPod" placeholder="Target Pod Folder URL" required />
+    <button type="submit">Sign Up</button>
+  </form>
+
+  <script>
+    document.getElementById("signup-form").onsubmit = async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const data = Object.fromEntries(new FormData(form));
+      const res = await fetch("/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const msg = await res.text();
+      alert(msg);
+      if (res.ok) window.location = "/login.html";
+    };
+  </script>
+</body>
+</html>

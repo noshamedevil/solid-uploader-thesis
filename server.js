@@ -1,6 +1,6 @@
 import express from "express";
 import fileUpload from "express-fileupload";
-import { Session } from "@inrupt/solid-client-authn-node";
+import session from "express-session";
 import { overwriteFile } from "@inrupt/solid-client";
 import dotenv from "dotenv";
 import fs from "fs";
@@ -8,6 +8,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { processAndBlur } from "./ocrProcess.js";
 import { encryptFile, decryptFileToBuffer } from "./encryption.js";
+import authRoutes from "./auth.js";
+import { Session } from "@inrupt/solid-client-authn-node";
 
 dotenv.config();
 
@@ -17,6 +19,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(fileUpload());
 app.use(express.static(path.join(__dirname, "public")));
+app.use(express.json());
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || "supersecret",
+  resave: false,
+  saveUninitialized: false
+}));
+
+app.use(authRoutes);
 
 const uploadsDir = path.join(__dirname, "uploads");
 const rawDir = path.join(uploadsDir, "raw");
@@ -24,24 +35,10 @@ const rawDir = path.join(uploadsDir, "raw");
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
 });
 
-const session = new Session();
-await session.login({
-  clientId: process.env.CLIENT_ID,
-  clientSecret: process.env.CLIENT_SECRET,
-  oidcIssuer: process.env.OIDC_ISSUER,
-});
-
-if (!session.info.isLoggedIn) {
-  console.error("❌ Login failed");
-  process.exit(1);
-}
-console.log(`✅ Server logged in as ${session.info.webId}`);
-
-const podFolder = process.env.TARGET_POD_FOLDER.endsWith("/")
-  ? process.env.TARGET_POD_FOLDER
-  : process.env.TARGET_POD_FOLDER + "/";
-
 app.post("/upload", async (req, res) => {
+  const user = req.session.user;
+  if (!user) return res.status(401).send("Unauthorized. Please log in.");
+
   if (!req.files || !req.files.file) {
     return res.status(400).send("No file uploaded.");
   }
@@ -51,24 +48,33 @@ app.post("/upload", async (req, res) => {
     const fileName = file.name;
     const rawPath = path.join(rawDir, fileName);
 
-    // Save raw
     await file.mv(rawPath);
     console.log(`📥 Raw file saved at ${rawPath}`);
 
-    // Redact and upload
     const redactedBuffer = await processAndBlur(rawPath);
 
-    // Encrypt and store raw
     const encryptedPath = rawPath + ".enc";
     await encryptFile(rawPath, encryptedPath);
     console.log(`🔐 Encrypted raw stored at ${encryptedPath}`);
 
-    // Delete unencrypted raw file
     fs.unlinkSync(rawPath);
     console.log("🧹 Raw unencrypted file deleted");
 
-    // Upload redacted version to Solid Pod
+    // Login to the user's Solid Pod dynamically
+    const session = new Session();
+    await session.login({
+      clientId: user.clientId,
+      clientSecret: user.clientSecret,
+      oidcIssuer: user.oidcIssuer,
+    });
+
+    if (!session.info.isLoggedIn) {
+      return res.status(403).send("Solid login failed.");
+    }
+
+    const podFolder = user.targetPod.endsWith("/") ? user.targetPod : user.targetPod + "/";
     const remoteUrl = new URL(fileName, podFolder).href;
+
     await overwriteFile(remoteUrl, redactedBuffer, {
       contentType: file.mimetype || "application/octet-stream",
       fetch: session.fetch,
@@ -85,7 +91,7 @@ app.get("/view", async (req, res) => {
   const fileParam = req.query.file;
   if (!fileParam) return res.status(400).send("Missing file parameter");
 
-  const encFilePath = path.join(rawDir, fileParam);
+  const encFilePath = path.join(__dirname, "uploads/raw", fileParam);
 
   try {
     const decryptedBuffer = await decryptFileToBuffer(encFilePath);
