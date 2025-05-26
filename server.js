@@ -1,3 +1,5 @@
+// ✅ Full server.js with UID-based filenames and all routes
+
 import express from "express";
 import fileUpload from "express-fileupload";
 import session from "express-session";
@@ -10,7 +12,8 @@ import { processAndBlur } from "./ocrProcess.js";
 import { encryptFile, decryptFileToBuffer } from "./encryption.js";
 import authRoutes from "./auth.js";
 import { Session } from "@inrupt/solid-client-authn-node";
-import fetch from "node-fetch"; // Required for manual pod deletion
+import fetch from "node-fetch";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -30,27 +33,6 @@ app.use(session({
 
 app.use(authRoutes);
 
-app.get("/", (req, res, next) => {
-  if (!req.session.user) return res.redirect("/login.html");
-  next();
-});
-
-app.get("/me", (req, res) => {
-  if (!req.session.user) return res.status(401).send("Unauthorized");
-  res.json({ email: req.session.user.email });
-});
-
-app.get("/logout", (req, res) => {
-  req.session.destroy(err => {
-    if (err) {
-      console.error("Logout error:", err);
-      return res.status(500).send("Logout failed.");
-    }
-    res.clearCookie("connect.sid");
-    res.send("✅ Logged out.");
-  });
-});
-
 const uploadsDir = path.join(__dirname, "uploads");
 const rawDir = path.join(uploadsDir, "raw");
 [uploadsDir, rawDir].forEach(dir => {
@@ -67,15 +49,17 @@ app.post("/upload", async (req, res) => {
 
   try {
     const file = req.files.file;
-    const fileName = file.name;
-    const rawPath = path.join(rawDir, fileName);
+    const ext = path.extname(file.name);
+    const uid = crypto.randomUUID();
+    const serverName = `${uid}${ext}`;
+    const rawPath = path.join(rawDir, serverName);
+    const encryptedPath = rawPath + ".enc";
 
     await file.mv(rawPath);
     console.log(`📥 Raw file saved at ${rawPath}`);
 
     const redactedBuffer = await processAndBlur(rawPath);
 
-    const encryptedPath = rawPath + ".enc";
     await encryptFile(rawPath, encryptedPath);
     console.log(`🔐 Encrypted raw stored at ${encryptedPath}`);
 
@@ -89,12 +73,8 @@ app.post("/upload", async (req, res) => {
       oidcIssuer: user.oidcIssuer,
     });
 
-    if (!session.info.isLoggedIn) {
-      return res.status(403).send("Solid login failed.");
-    }
-
     const podFolder = user.targetPod.endsWith("/") ? user.targetPod : user.targetPod + "/";
-    const remoteUrl = new URL(fileName, podFolder).href;
+    const remoteUrl = new URL(serverName, podFolder).href;
 
     await overwriteFile(remoteUrl, redactedBuffer, {
       contentType: file.mimetype || "application/octet-stream",
@@ -108,19 +88,26 @@ app.post("/upload", async (req, res) => {
   }
 });
 
+app.get("/me", (req, res) => {
+  if (!req.session.user) return res.status(401).send("Unauthorized");
+  res.json({ email: req.session.user.email });
+});
+
+app.get("/logout", (req, res) => {
+  req.session.destroy(err => {
+    if (err) return res.status(500).send("Logout failed.");
+    res.clearCookie("connect.sid");
+    res.send("✅ Logged out.");
+  });
+});
+
 app.get("/view", async (req, res) => {
   const fileParam = req.query.file;
   const isFromGate = req.get("X-Trusted-Gate") === "true";
-
   if (!fileParam) return res.status(400).send("Missing file parameter");
+  if (!isFromGate) return res.status(403).send("Access denied. Use secure view interface.");
 
-  // 🚫 Reject requests that don’t come from your view-gate.html
-  if (!isFromGate) {
-    return res.status(403).send("Access denied. Use the secure view interface.");
-  }
-
-  const encFilePath = path.join(__dirname, "uploads/raw", fileParam);
-
+  const encFilePath = path.join(rawDir, fileParam);
   try {
     const decryptedBuffer = await decryptFileToBuffer(encFilePath);
     const ext = path.extname(fileParam).replace(".enc", "") || ".jpg";
@@ -133,20 +120,14 @@ app.get("/view", async (req, res) => {
   }
 });
 
-
-// 🔥 DELETE /file — delete Pod + encrypted version
 app.delete("/file", async (req, res) => {
   const url = req.query.url;
   if (!url || !req.session.user) return res.status(400).send("Missing URL or not logged in");
 
   try {
     const fileName = decodeURIComponent(url.split("/").pop());
-    const encPath = path.join(__dirname, "uploads/raw", fileName + ".enc");
-    const metaPath = encPath + ".meta.json";
-
+    const encPath = path.join(rawDir, fileName + ".enc");
     if (fs.existsSync(encPath)) fs.unlinkSync(encPath);
-    if (fs.existsSync(metaPath)) fs.unlinkSync(metaPath);
-    console.log("🧹 Deleted encrypted + metadata:", fileName);
 
     const podFolder = req.session.user.targetPod.endsWith("/")
       ? req.session.user.targetPod

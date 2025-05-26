@@ -63,6 +63,11 @@
       background-repeat: no-repeat;
       background-size: contain;
     }
+
+    .back-btn {
+      background: #457b9d;
+      margin-top: 2em;
+    }
   </style>
 </head>
 <body>
@@ -72,6 +77,7 @@
 
     <input type="text" id="linkInput" placeholder="Paste your view link here" />
     <button onclick="handleView()">View Document</button>
+    <button class="back-btn" onclick="window.location='/index.html'">⬅ Go Back to Uploader</button>
 
     <div id="error" class="error"></div>
     <div id="preview"></div>
