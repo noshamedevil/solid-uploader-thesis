@@ -35,14 +35,29 @@ export async function processAndBlur(filePath) {
 
   lines.forEach((line, idx) => {
     const lower = line.toLowerCase();
-    if (nameLabels.some(lbl => lower.includes(lbl))) {
-      for (let j = 1; j <= 10 && lines[idx + j]; j++) {
-        const next = lines[idx + j].trim();
-        if (regexes.fullName.test(next) || regexes.allCapsName.test(next)) {
-          next.split(/\s+/).forEach(part => possibleNames.add(part.toLowerCase()));
+if (nameLabels.some(lbl => lower.includes(lbl))) {
+  // same-line scan
+  const afterLabel = line.split(/[:\-]/).pop().trim();
+  if (afterLabel) {
+    afterLabel.split(/\s+/).forEach(p => {
+      if (p.length > 1) possibleNames.add(p.toLowerCase());
+    });
+  }
+
+  // also scan next 5–10 lines even if one-word entries
+  for (let j = 1; j <= 10 && lines[idx + j]; j++) {
+    const next = lines[idx + j].trim();
+    const parts = next.split(/\s+/);
+    if (parts.length <= 4) {
+      parts.forEach(p => {
+        if (/^[A-Z][a-z]+$/.test(p) || /^[A-Z]+$/.test(p)) {
+          possibleNames.add(p.toLowerCase());
         }
-      }
+      });
     }
+  }
+}
+
   });
 
   console.log("🧠 Auto-detected name tokens:", [...possibleNames].join(", "));
