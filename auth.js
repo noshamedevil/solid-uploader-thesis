@@ -3,6 +3,9 @@ import fs from "fs/promises";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import path from "path";
+// env.js
+import dotenv from "dotenv";
+dotenv.config();
 
 const router = express.Router();
 const USERS_FILE = path.join("users.json");

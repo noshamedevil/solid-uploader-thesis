@@ -1,9 +1,9 @@
-// ✅ Full server.js with UID-based filenames and all routes
+// ✅ Full server.js with upload, sync, view, and deletion support
 
 import express from "express";
 import fileUpload from "express-fileupload";
 import session from "express-session";
-import { overwriteFile } from "@inrupt/solid-client";
+import { overwriteFile, getSolidDataset, getThingAll, getStringNoLocale } from "@inrupt/solid-client";
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
@@ -11,9 +11,11 @@ import { fileURLToPath } from "url";
 import { processAndBlur } from "./ocrProcess.js";
 import { encryptFile, decryptFileToBuffer } from "./encryption.js";
 import authRoutes from "./auth.js";
+import syncRoutes from "./sync.js";
 import { Session } from "@inrupt/solid-client-authn-node";
 import fetch from "node-fetch";
 import crypto from "crypto";
+import { writeFileSync } from "fs";
 
 dotenv.config();
 
@@ -32,6 +34,7 @@ app.use(session({
 }));
 
 app.use(authRoutes);
+app.use(syncRoutes);
 
 const uploadsDir = path.join(__dirname, "uploads");
 const rawDir = path.join(uploadsDir, "raw");
@@ -50,21 +53,16 @@ app.post("/upload", async (req, res) => {
   try {
     const file = req.files.file;
     const ext = path.extname(file.name);
-    const uid = crypto.randomUUID();
-    const serverName = `${uid}${ext}`;
-    const rawPath = path.join(rawDir, serverName);
-    const encryptedPath = rawPath + ".enc";
+    const originalName = path.basename(file.name, ext);
+    const uuid = crypto.randomUUID();
 
-    await file.mv(rawPath);
-    console.log(`📥 Raw file saved at ${rawPath}`);
+    const redactedName = `${originalName}_blurred${ext}`;
+    const encryptedName = `${uuid}${ext}.enc`;
+    const encryptedPath = path.join(rawDir, encryptedName);
 
-    const redactedBuffer = await processAndBlur(rawPath);
-
-    await encryptFile(rawPath, encryptedPath);
-    console.log(`🔐 Encrypted raw stored at ${encryptedPath}`);
-
-    fs.unlinkSync(rawPath);
-    console.log("🧹 Raw unencrypted file deleted");
+    const redactedBuffer = await processAndBlur(file.data);
+    await encryptFile(file.data, encryptedPath);
+    console.log(`🔐 Encrypted original stored as ${encryptedPath}`);
 
     const session = new Session();
     await session.login({
@@ -74,14 +72,42 @@ app.post("/upload", async (req, res) => {
     });
 
     const podFolder = user.targetPod.endsWith("/") ? user.targetPod : user.targetPod + "/";
-    const remoteUrl = new URL(serverName, podFolder).href;
+    const remoteUrl = new URL(redactedName, podFolder).href;
 
     await overwriteFile(remoteUrl, redactedBuffer, {
       contentType: file.mimetype || "application/octet-stream",
       fetch: session.fetch,
     });
 
-    res.send({ message: "✅ File uploaded", url: remoteUrl });
+    const metadata = `
+@prefix dc: <http://purl.org/dc/elements/1.1/> .
+@prefix schema: <http://schema.org/> .
+
+<> a schema:MediaObject ;
+   dc:title "${file.name}" ;
+   schema:dateCreated "${new Date().toISOString()}" ;
+   schema:contentUrl <${remoteUrl}> ;
+   schema:encryptedCopy "${encryptedName}" .
+`;
+
+    const metaName = redactedName + ".ttl";
+    const metaPath = path.join(rawDir, metaName);
+    writeFileSync(metaPath, metadata);
+
+    const remoteMetaUrl = new URL(metaName, podFolder).href;
+    await overwriteFile(remoteMetaUrl, fs.readFileSync(metaPath), {
+      contentType: "text/turtle",
+      fetch: session.fetch,
+    });
+
+    fs.unlinkSync(metaPath);
+    console.log("📝 Metadata uploaded and cleaned locally");
+
+    res.send({
+      message: "✅ File uploaded",
+      url: remoteUrl,
+      encryptedLocalFile: encryptedName
+    });
   } catch (err) {
     console.error("❌ Upload error:", err);
     res.status(500).send("❌ Upload failed: " + err.message);
@@ -122,34 +148,44 @@ app.get("/view", async (req, res) => {
 
 app.delete("/file", async (req, res) => {
   const url = req.query.url;
-  if (!url || !req.session.user) return res.status(400).send("Missing URL or not logged in");
+  const user = req.session.user;
+  if (!url || !user) return res.status(400).send("Missing URL or not logged in");
 
   try {
     const fileName = decodeURIComponent(url.split("/").pop());
-    const encPath = path.join(rawDir, fileName + ".enc");
-    if (fs.existsSync(encPath)) fs.unlinkSync(encPath);
-
-    const podFolder = req.session.user.targetPod.endsWith("/")
-      ? req.session.user.targetPod
-      : req.session.user.targetPod + "/";
-    const podFileUrl = new URL(fileName, podFolder).href;
+    const podFolder = user.targetPod.endsWith("/") ? user.targetPod : user.targetPod + "/";
+    const metaUrl = new URL(fileName + ".ttl", podFolder).href;
 
     const session = new Session();
     await session.login({
-      clientId: req.session.user.clientId,
-      clientSecret: req.session.user.clientSecret,
-      oidcIssuer: req.session.user.oidcIssuer,
+      clientId: user.clientId,
+      clientSecret: user.clientSecret,
+      oidcIssuer: user.oidcIssuer,
     });
 
-    await fetch(podFileUrl, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${session.info.sessionId}` }
-    });
+    const ttlDataset = await getSolidDataset(metaUrl, { fetch: session.fetch });
+    const thing = getThingAll(ttlDataset)[0];
+    const encryptedCopy = getStringNoLocale(thing, "http://schema.org/encryptedCopy");
 
-    res.send("✅ File deleted from server and Solid Pod.");
+    if (encryptedCopy) {
+      const encPath = path.join(rawDir, encryptedCopy);
+      if (fs.existsSync(encPath)) fs.unlinkSync(encPath);
+    }
+
+    const deleteFromPod = async (targetUrl) => {
+      await fetch(targetUrl, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.info.sessionId}` }
+      });
+    };
+
+    await deleteFromPod(url);
+    await deleteFromPod(metaUrl);
+
+    res.send("✅ File and metadata deleted from Solid Pod and local server.");
   } catch (err) {
-    console.error("❌ Deletion error:", err.message);
-    res.status(500).send("Failed to delete file.");
+    console.error("❌ Deletion error:", err);
+    res.status(500).send("Failed to delete file or metadata.");
   }
 });
 
