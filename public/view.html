@@ -10,7 +10,6 @@
       padding: 0;
       background: #f0f2f5;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
       height: 100vh;
@@ -18,23 +17,34 @@
 
     .viewer {
       max-width: 90%;
-      max-height: 90vh;
+      width: 100%;
       background: white;
-      padding: 1em;
+      padding: 1.5em;
       border-radius: 10px;
-      box-shadow: 0 0 20px rgba(0,0,0,0.1);
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
       text-align: center;
     }
 
     h2 {
-      margin-bottom: 0.5em;
       color: #1d3557;
+      margin-top: 0;
     }
 
     .info {
       font-size: 0.9rem;
       color: #666;
-      margin-bottom: 1em;
+      margin-bottom: 1.5em;
+    }
+
+    .secure-image {
+      width: 100%;
+      height: 80vh;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: contain;
+      background-color: white;
+      border-radius: 5px;
+      user-select: none;
     }
 
     iframe {
@@ -43,35 +53,17 @@
       border: none;
       border-radius: 5px;
     }
-
-    .img-wrapper {
-      position: relative;
-      display: inline-block;
-      width: 100%;
-    }
-
-    .img-wrapper img {
-      display: block;
-      width: 100%;
-      height: auto;
-      border-radius: 5px;
-    }
-
-    .img-wrapper .overlay {
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: transparent;
-      z-index: 2;
-    }
   </style>
+
+  <!-- Block context menu globally -->
   <script>
     document.addEventListener("contextmenu", (e) => e.preventDefault());
   </script>
 </head>
 <body>
   <div class="viewer">
-    <h2>Secure Document Viewer</h2>
-    <div class="info">Right-click has been disabled for privacy protection.</div>
+    <h2>Secure Viewer</h2>
+    <div class="info">Right-click has been disabled to protect this content.</div>
     <div id="content">Loading...</div>
   </div>
 
@@ -91,20 +83,12 @@
         container.innerHTML = "";
         container.appendChild(iframe);
       } else {
-        const wrapper = document.createElement("div");
-        wrapper.className = "img-wrapper";
+        const secureDiv = document.createElement("div");
+        secureDiv.className = "secure-image";
+        secureDiv.style.backgroundImage = `url('${viewURL}')`;
 
-        const img = document.createElement("img");
-        img.src = viewURL;
-        img.alt = "Secure Image";
-
-        const overlay = document.createElement("div");
-        overlay.className = "overlay";
-        overlay.oncontextmenu = () => false;
-
-        wrapper.append(img, overlay);
         container.innerHTML = "";
-        container.appendChild(wrapper);
+        container.appendChild(secureDiv);
       }
     }
   </script>

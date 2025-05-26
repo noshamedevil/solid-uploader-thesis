@@ -110,7 +110,14 @@ app.post("/upload", async (req, res) => {
 
 app.get("/view", async (req, res) => {
   const fileParam = req.query.file;
+  const isFromGate = req.get("X-Trusted-Gate") === "true";
+
   if (!fileParam) return res.status(400).send("Missing file parameter");
+
+  // 🚫 Reject requests that don’t come from your view-gate.html
+  if (!isFromGate) {
+    return res.status(403).send("Access denied. Use the secure view interface.");
+  }
 
   const encFilePath = path.join(__dirname, "uploads/raw", fileParam);
 
@@ -125,6 +132,7 @@ app.get("/view", async (req, res) => {
     res.status(500).send("Decryption failed or file not found.");
   }
 });
+
 
 // 🔥 DELETE /file — delete Pod + encrypted version
 app.delete("/file", async (req, res) => {

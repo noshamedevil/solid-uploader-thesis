@@ -29,11 +29,13 @@
 
     .button-group {
       display: flex;
+      flex-wrap: wrap;
       gap: 0.5em;
     }
 
     #logout-btn,
-    #settings-btn {
+    #settings-btn,
+    #view-gate-btn {
       background: #2a9d8f;
       color: white;
       border: none;
@@ -104,6 +106,7 @@
     <h2>
       Upload to Solid Pod
       <span class="button-group">
+        <button id="view-gate-btn">View Document</button>
         <button id="settings-btn">Settings</button>
         <button id="logout-btn">Logout</button>
       </span>
@@ -133,6 +136,10 @@
 
     document.getElementById("settings-btn").onclick = () => {
       window.location = "/settings.html";
+    };
+
+    document.getElementById("view-gate-btn").onclick = () => {
+      window.location = "/view-gate.html";
     };
 
     async function loadUser() {
