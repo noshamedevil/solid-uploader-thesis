@@ -28,10 +28,23 @@
     button {
       margin-left: 8px;
     }
+
+    #logout-btn {
+      float: right;
+      background: #f33;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-  <h2>Upload to Solid Pod</h2>
+  <h2>
+    Upload to Solid Pod
+    <button id="logout-btn">Logout</button>
+  </h2>
+
   <form id="upload-form">
     <input type="file" id="fileInput" />
     <button type="submit">Upload</button>
@@ -43,6 +56,13 @@
   <script type="module">
     const form = document.getElementById("upload-form");
     const fileList = document.getElementById("file-list");
+
+    document.getElementById("logout-btn").onclick = async () => {
+      const res = await fetch("/logout");
+      const msg = await res.text();
+      alert(msg);
+      window.location = "/login.html";
+    };
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -87,7 +107,7 @@
         copyBtn.textContent = "🔗 Copy Link";
         copyBtn.onclick = () => {
           navigator.clipboard.writeText(url);
-          alert("🔗 Link copied to clipboard!");
+          alert("🔗 Redacted Pod link copied to clipboard!");
         };
 
         const deleteBtn = document.createElement("button");
@@ -99,7 +119,7 @@
             });
             const msg = await res.text();
             alert(msg);
-            li.remove(); // remove from UI
+            li.remove();
           }
         };
 
@@ -140,7 +160,7 @@
           copyBtn.textContent = "🔗 Copy Link";
           copyBtn.onclick = () => {
             navigator.clipboard.writeText(url);
-            alert("🔗 Link copied to clipboard!");
+            alert("🔗 Redacted Pod link copied to clipboard!");
           };
 
           const deleteBtn = document.createElement("button");
