@@ -1,4 +1,4 @@
-// ✅ Full server.js with upload, sync, view, and deletion support
+// ✅ Final production-ready server.js with Redis session support
 
 import express from "express";
 import fileUpload from "express-fileupload";
@@ -16,6 +16,10 @@ import { Session } from "@inrupt/solid-client-authn-node";
 import fetch from "node-fetch";
 import crypto from "crypto";
 import { writeFileSync } from "fs";
+import Redis from "ioredis";
+import connectRedis from "connect-redis";
+
+
 
 dotenv.config();
 
@@ -27,10 +31,24 @@ app.use(fileUpload());
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
 
+// Redis session config
+const RedisStore = connectRedis(session);
+const redisClient = new Redis({
+  host: process.env.REDIS_HOST || "127.0.0.1",
+  port: parseInt(process.env.REDIS_PORT || "6379"),
+  password: process.env.REDIS_PASSWORD || undefined
+});
+
 app.use(session({
+  store: new RedisStore({ client: redisClient }),
   secret: process.env.SESSION_SECRET || "supersecret",
   resave: false,
-  saveUninitialized: false
+  saveUninitialized: false,
+  cookie: {
+    secure: false,
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60
+  }
 }));
 
 app.use(authRoutes);
@@ -45,24 +63,19 @@ const rawDir = path.join(uploadsDir, "raw");
 app.post("/upload", async (req, res) => {
   const user = req.session.user;
   if (!user) return res.status(401).send("Unauthorized. Please log in.");
-
-  if (!req.files || !req.files.file) {
-    return res.status(400).send("No file uploaded.");
-  }
+  if (!req.files || !req.files.file) return res.status(400).send("No file uploaded.");
 
   try {
     const file = req.files.file;
     const ext = path.extname(file.name);
     const originalName = path.basename(file.name, ext);
     const uuid = crypto.randomUUID();
-
     const redactedName = `${originalName}_blurred${ext}`;
     const encryptedName = `${uuid}${ext}.enc`;
     const encryptedPath = path.join(rawDir, encryptedName);
 
     const redactedBuffer = await processAndBlur(file.data);
     await encryptFile(file.data, encryptedPath);
-    console.log(`🔐 Encrypted original stored as ${encryptedPath}`);
 
     const session = new Session();
     await session.login({
@@ -73,7 +86,6 @@ app.post("/upload", async (req, res) => {
 
     const podFolder = user.targetPod.endsWith("/") ? user.targetPod : user.targetPod + "/";
     const remoteUrl = new URL(redactedName, podFolder).href;
-
     await overwriteFile(remoteUrl, redactedBuffer, {
       contentType: file.mimetype || "application/octet-stream",
       fetch: session.fetch,
@@ -101,13 +113,7 @@ app.post("/upload", async (req, res) => {
     });
 
     fs.unlinkSync(metaPath);
-    console.log("📝 Metadata uploaded and cleaned locally");
-
-    res.send({
-      message: "✅ File uploaded",
-      url: remoteUrl,
-      encryptedLocalFile: encryptedName
-    });
+    res.send({ message: "✅ File uploaded", url: remoteUrl, encryptedLocalFile: encryptedName });
   } catch (err) {
     console.error("❌ Upload error:", err);
     res.status(500).send("❌ Upload failed: " + err.message);
@@ -146,8 +152,6 @@ app.get("/view", async (req, res) => {
   }
 });
 
-// ✅ Updated: fallback to session.fetch (solid-auth fetch)
-
 app.delete("/file", async (req, res) => {
   const url = req.query.url;
   const user = req.session.user;
@@ -168,7 +172,6 @@ app.delete("/file", async (req, res) => {
     const ttlDataset = await getSolidDataset(metaUrl, { fetch: session.fetch });
     const thing = getThingAll(ttlDataset)[0];
     const encryptedCopy = getStringNoLocale(thing, "http://schema.org/encryptedCopy");
-
     if (encryptedCopy) {
       const encPath = path.join("uploads/raw", encryptedCopy);
       if (fs.existsSync(encPath)) fs.unlinkSync(encPath);
@@ -191,7 +194,6 @@ app.delete("/file", async (req, res) => {
     res.status(500).send("Failed to delete file or metadata.");
   }
 });
-
 
 app.listen(3001, () => {
   console.log("🚀 Upload server listening at http://localhost:3001");
