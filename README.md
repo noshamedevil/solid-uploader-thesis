@@ -36,7 +36,7 @@ REDIS_PORT=6379
 # Optional fallback credentials (for testing only)
 CLIENT_ID=YourSolidAppClientID
 CLIENT_SECRET=YourSolidAppClientSecret
-OIDC_ISSUER=https://broker.pod.inrupt.com
+OIDC_ISSUER=https://solidcommunity.net
 DEFAULT_TARGET_POD=https://yourpod.solidcommunity.net/public/
 ```
 
@@ -66,7 +66,7 @@ http://localhost:3001/login.html
 
 ## 👤 Creating Users (Solid Setup)
 
-1. Go to [https://broker.pod.inrupt.com](https://broker.pod.inrupt.com)
+1. Go to [https://solidcommunity.net](https://solidcommunity.net)
 2. Create a Solid Pod account (e.g., refugee-pod)
 3. Register an app/client ID
 4. Store your `clientId` and `clientSecret` in your `.env` or provide them via login form
