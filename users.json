@@ -4,9 +4,23 @@
     "password": "$2b$10$AdqiPfaDXPs5dJgnwk8xP.GDK5NSlOZTNKQt40Jpha/7scD1wWTUK",
     "clientId": "hehe_2b06a090-1d41-45a3-a2fc-28409078faed",
     "clientSecret": {
-      "iv": "d280459d12f3eea337a2eb5f",
-      "tag": "1d5f25efa41054b14bc88d31614ebd17",
-      "data": "c9552f102ae411dd18306292be0f488797138c5b2b9e700c2af2d7cef379bb7da9dace8ddd9cd6bfeaa6495c161e1d43d72f538b02786ee94bd5028f155f87b422631ab8a1a9f139b6624416e36dc47117b238c999e6466f1aef530bfc5e6f69f1ce80acabac863bbcf94e51fba3d9b23200023d06b0d719d47a406d07943133"
+      "iv": "5edcda62c1db97f3e63c2d61",
+      "tag": "110ebea29c1ea9e4a3ddfde35bdd2bf6",
+      "data": "c7090daa3955cdfbcef9d67543a91ef8047913e4f5002eb37e2c556c41000d574bcc9c4e13606542c2948f48185668d2cea63a8a8e6f5dc99614f4c3525703d57a9e6c98071959daaa81f0a6f970e619d1ea3e599125cca5d8b57189aaa27e6af4d68c89df8919f65e291bb06380dd036958c4cfd5e67c6c3a032eaf93131699"
+    },
+    "oidcIssuer": "https://solidcommunity.net",
+    "targetPod": "https://refugee-pod.solidcommunity.net/public/",
+    "firstName": "Nimish",
+    "lastName": "Pandey"
+  },
+  {
+    "email": "email@ngo.com",
+    "password": "$2b$10$U24Hb7sMXvTrnnui9gqDC.ffwQxUqQrtgkVgu5mEVCTqhHjKIGHUq",
+    "clientId": "refugee-pod-app_7846a959-65e1-4029-9b0e-63863d23bba2",
+    "clientSecret": {
+      "iv": "7528c5e4fb88abca7ea83b29",
+      "tag": "24ed2dc49231efcc326b97c5619c5a00",
+      "data": "5473fbdff1b6815a49d55d05062cc11c294a62e712948127d6981575983555b8523b6fa237caed6875f5a6388b245d9d6f0e7e2faf09f307152dfe1e0c8e75b68e74518adb59dcc36312364429f7b3be31d2a2ad88e493c1edde035598de737a355723f63068e6546206780e93a8704286ac73ca6f03344c8a9746ae92353654e2e170358ef6c73b9e1b77439e044da2d58833a6a2ccfbe172f646d58293126564c1f5b790e0067f9e0e30c4fb42499c4b11d2f84f5e6efa1b9c3c8a7bce76b9b61833ad1cac0b508ad60d1b75eedac1f6ccce31d16c9fb1557ed0aa31e25e4e23f92e5689c5090ee3144313a860fee698f15467fdce3d232aeaedbcbf13ff12"
     },
     "oidcIssuer": "https://solidcommunity.net",
     "targetPod": "https://refugee-pod.solidcommunity.net/public/"

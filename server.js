@@ -1,9 +1,14 @@
-// ✅ Final production-ready server.js with Redis session support
+// ✅ Final production-ready server.js with Redis session support and NGO alert system
 
 import express from "express";
 import fileUpload from "express-fileupload";
 import session from "express-session";
-import { overwriteFile, getSolidDataset, getThingAll, getStringNoLocale } from "@inrupt/solid-client";
+import {
+  overwriteFile,
+  getSolidDataset,
+  getThingAll,
+  getStringNoLocale,
+} from "@inrupt/solid-client";
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
@@ -12,14 +17,13 @@ import { processAndBlur } from "./ocrProcess.js";
 import { encryptFile, decryptFileToBuffer } from "./encryption.js";
 import authRoutes from "./auth.js";
 import syncRoutes from "./sync.js";
+import alertRoutes from "./alerts.js";
 import { Session } from "@inrupt/solid-client-authn-node";
 import fetch from "node-fetch";
 import crypto from "crypto";
 import { writeFileSync } from "fs";
 import Redis from "ioredis";
 import connectRedis from "connect-redis";
-
-
 
 dotenv.config();
 
@@ -36,34 +40,46 @@ const RedisStore = connectRedis(session);
 const redisClient = new Redis({
   host: process.env.REDIS_HOST || "127.0.0.1",
   port: parseInt(process.env.REDIS_PORT || "6379"),
-  password: process.env.REDIS_PASSWORD || undefined
+  password: process.env.REDIS_PASSWORD || undefined,
 });
 
-app.use(session({
-  store: new RedisStore({ client: redisClient }),
-  secret: process.env.SESSION_SECRET || "supersecret",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: false,
-    httpOnly: true,
-    maxAge: 1000 * 60 * 60
+app.use(
+  session({
+    store: new RedisStore({ client: redisClient }),
+    secret: process.env.SESSION_SECRET || "supersecret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: false,
+      httpOnly: true,
+      maxAge: 1000 * 60 * 60,
+    },
+  }),
+);
+
+// Assign admin role based on email domain
+app.use((req, res, next) => {
+  if (req.session?.user?.email?.endsWith("@ngo.com")) {
+    req.session.user.role = "admin";
   }
-}));
+  next();
+});
 
 app.use(authRoutes);
 app.use(syncRoutes);
+app.use(alertRoutes);
 
 const uploadsDir = path.join(__dirname, "uploads");
 const rawDir = path.join(uploadsDir, "raw");
-[uploadsDir, rawDir].forEach(dir => {
+[uploadsDir, rawDir].forEach((dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
 });
 
 app.post("/upload", async (req, res) => {
   const user = req.session.user;
   if (!user) return res.status(401).send("Unauthorized. Please log in.");
-  if (!req.files || !req.files.file) return res.status(400).send("No file uploaded.");
+  if (!req.files || !req.files.file)
+    return res.status(400).send("No file uploaded.");
 
   try {
     const file = req.files.file;
@@ -84,7 +100,9 @@ app.post("/upload", async (req, res) => {
       oidcIssuer: user.oidcIssuer,
     });
 
-    const podFolder = user.targetPod.endsWith("/") ? user.targetPod : user.targetPod + "/";
+    const podFolder = user.targetPod.endsWith("/")
+      ? user.targetPod
+      : user.targetPod + "/";
     const remoteUrl = new URL(redactedName, podFolder).href;
     await overwriteFile(remoteUrl, redactedBuffer, {
       contentType: file.mimetype || "application/octet-stream",
@@ -113,7 +131,11 @@ app.post("/upload", async (req, res) => {
     });
 
     fs.unlinkSync(metaPath);
-    res.send({ message: "✅ File uploaded", url: remoteUrl, encryptedLocalFile: encryptedName });
+    res.send({
+      message: "✅ File uploaded",
+      url: remoteUrl,
+      encryptedLocalFile: encryptedName,
+    });
   } catch (err) {
     console.error("❌ Upload error:", err);
     res.status(500).send("❌ Upload failed: " + err.message);
@@ -126,7 +148,7 @@ app.get("/me", (req, res) => {
 });
 
 app.get("/logout", (req, res) => {
-  req.session.destroy(err => {
+  req.session.destroy((err) => {
     if (err) return res.status(500).send("Logout failed.");
     res.clearCookie("connect.sid");
     res.send("✅ Logged out.");
@@ -137,7 +159,8 @@ app.get("/view", async (req, res) => {
   const fileParam = req.query.file;
   const isFromGate = req.get("X-Trusted-Gate") === "true";
   if (!fileParam) return res.status(400).send("Missing file parameter");
-  if (!isFromGate) return res.status(403).send("Access denied. Use secure view interface.");
+  if (!isFromGate)
+    return res.status(403).send("Access denied. Use secure view interface.");
 
   const encFilePath = path.join(rawDir, fileParam);
   try {
@@ -155,11 +178,14 @@ app.get("/view", async (req, res) => {
 app.delete("/file", async (req, res) => {
   const url = req.query.url;
   const user = req.session.user;
-  if (!url || !user) return res.status(400).send("Missing URL or not logged in");
+  if (!url || !user)
+    return res.status(400).send("Missing URL or not logged in");
 
   try {
     const fileName = decodeURIComponent(url.split("/").pop());
-    const podFolder = user.targetPod.endsWith("/") ? user.targetPod : user.targetPod + "/";
+    const podFolder = user.targetPod.endsWith("/")
+      ? user.targetPod
+      : user.targetPod + "/";
     const metaUrl = new URL(fileName + ".ttl", podFolder).href;
 
     const session = new Session();
@@ -171,7 +197,10 @@ app.delete("/file", async (req, res) => {
 
     const ttlDataset = await getSolidDataset(metaUrl, { fetch: session.fetch });
     const thing = getThingAll(ttlDataset)[0];
-    const encryptedCopy = getStringNoLocale(thing, "http://schema.org/encryptedCopy");
+    const encryptedCopy = getStringNoLocale(
+      thing,
+      "http://schema.org/encryptedCopy",
+    );
     if (encryptedCopy) {
       const encPath = path.join("uploads/raw", encryptedCopy);
       if (fs.existsSync(encPath)) fs.unlinkSync(encPath);
@@ -180,7 +209,11 @@ app.delete("/file", async (req, res) => {
     const deleteFromPod = async (targetUrl) => {
       const response = await session.fetch(targetUrl, { method: "DELETE" });
       if (!response.ok) {
-        console.error(`❌ Failed to delete ${targetUrl}:`, response.status, await response.text());
+        console.error(
+          `❌ Failed to delete ${targetUrl}:`,
+          response.status,
+          await response.text(),
+        );
         throw new Error(`Failed to delete ${targetUrl}`);
       }
     };

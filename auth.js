@@ -3,41 +3,64 @@ import fs from "fs/promises";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import path from "path";
-// env.js
 import dotenv from "dotenv";
 dotenv.config();
 
 const router = express.Router();
 const USERS_FILE = path.join("users.json");
 
-// 🔐 AES encryption setup for client secrets
 const ENC_ALGO = "aes-256-gcm";
-const ENC_KEY = crypto.createHash("sha256").update(process.env.ENCRYPTION_SECRET).digest(); // 32 bytes
+const ENC_KEY = crypto
+  .createHash("sha256")
+  .update(process.env.ENCRYPTION_SECRET)
+  .digest();
 
 function encryptSecret(secret) {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv(ENC_ALGO, ENC_KEY, iv);
-  const encrypted = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
+  const encrypted = Buffer.concat([
+    cipher.update(secret, "utf8"),
+    cipher.final(),
+  ]);
   const tag = cipher.getAuthTag();
-  return { iv: iv.toString("hex"), tag: tag.toString("hex"), data: encrypted.toString("hex") };
+  return {
+    iv: iv.toString("hex"),
+    tag: tag.toString("hex"),
+    data: encrypted.toString("hex"),
+  };
 }
 
 function decryptSecret({ iv, tag, data }) {
-  const decipher = crypto.createDecipheriv(ENC_ALGO, ENC_KEY, Buffer.from(iv, "hex"));
+  const decipher = crypto.createDecipheriv(
+    ENC_ALGO,
+    ENC_KEY,
+    Buffer.from(iv, "hex"),
+  );
   decipher.setAuthTag(Buffer.from(tag, "hex"));
   return Buffer.concat([
     decipher.update(Buffer.from(data, "hex")),
-    decipher.final()
+    decipher.final(),
   ]).toString("utf8");
 }
 
 // ✅ POST /signup
 router.post("/signup", async (req, res) => {
-  const { email, password, clientId, clientSecret, oidcIssuer, targetPod } = req.body;
+  const {
+    email,
+    password,
+    clientId,
+    clientSecret,
+    oidcIssuer,
+    targetPod,
+    firstName,
+    lastName,
+  } = req.body;
 
   try {
-    const users = JSON.parse(await fs.readFile(USERS_FILE, "utf8").catch(() => "[]"));
-    if (users.find(u => u.email === email)) {
+    const users = JSON.parse(
+      await fs.readFile(USERS_FILE, "utf8").catch(() => "[]"),
+    );
+    if (users.find((u) => u.email === email)) {
       return res.status(400).send("User already exists.");
     }
 
@@ -50,7 +73,9 @@ router.post("/signup", async (req, res) => {
       clientId,
       clientSecret: encryptedSecret,
       oidcIssuer,
-      targetPod
+      targetPod,
+      firstName: firstName || "",
+      lastName: lastName || "",
     });
 
     await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
@@ -67,7 +92,7 @@ router.post("/login", async (req, res) => {
 
   try {
     const users = JSON.parse(await fs.readFile(USERS_FILE, "utf8"));
-    const user = users.find(u => u.email === email);
+    const user = users.find((u) => u.email === email);
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).send("Invalid credentials.");
@@ -78,7 +103,9 @@ router.post("/login", async (req, res) => {
       clientId: user.clientId,
       clientSecret: decryptSecret(user.clientSecret),
       oidcIssuer: user.oidcIssuer,
-      targetPod: user.targetPod
+      targetPod: user.targetPod,
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
     };
 
     res.send("✅ Login successful.");
@@ -87,9 +114,10 @@ router.post("/login", async (req, res) => {
     res.status(500).send("Login failed.");
   }
 });
+
 // ✅ GET /logout
 router.get("/logout", (req, res) => {
-  req.session.destroy(err => {
+  req.session.destroy((err) => {
     if (err) {
       console.error("Logout error:", err);
       return res.status(500).send("Logout failed.");
@@ -98,12 +126,13 @@ router.get("/logout", (req, res) => {
     res.send("✅ Logged out.");
   });
 });
-// GET /settings — fetch current user's Solid credentials
+
+// ✅ GET /settings
 router.get("/settings", async (req, res) => {
   if (!req.session.user) return res.status(401).send("Unauthorized");
 
   const users = JSON.parse(await fs.readFile(USERS_FILE, "utf8"));
-  const current = users.find(u => u.email === req.session.user.email);
+  const current = users.find((u) => u.email === req.session.user.email);
 
   if (!current) return res.status(404).send("User not found");
 
@@ -111,17 +140,20 @@ router.get("/settings", async (req, res) => {
     clientId: current.clientId,
     clientSecret: decryptSecret(current.clientSecret),
     oidcIssuer: current.oidcIssuer,
-    targetPod: current.targetPod
+    targetPod: current.targetPod,
+    firstName: current.firstName || "",
+    lastName: current.lastName || "",
   });
 });
 
-// POST /settings — update stored Solid credentials
+// ✅ POST /settings
 router.post("/settings", async (req, res) => {
   if (!req.session.user) return res.status(401).send("Unauthorized");
 
-  const { clientId, clientSecret, oidcIssuer, targetPod } = req.body;
+  const { clientId, clientSecret, oidcIssuer, targetPod, firstName, lastName } =
+    req.body;
   const users = JSON.parse(await fs.readFile(USERS_FILE, "utf8"));
-  const user = users.find(u => u.email === req.session.user.email);
+  const user = users.find((u) => u.email === req.session.user.email);
 
   if (!user) return res.status(404).send("User not found");
 
@@ -129,9 +161,19 @@ router.post("/settings", async (req, res) => {
   user.clientSecret = encryptSecret(clientSecret);
   user.oidcIssuer = oidcIssuer;
   user.targetPod = targetPod;
+  user.firstName = firstName || "";
+  user.lastName = lastName || "";
 
   await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
-  req.session.user = { email: user.email, clientId, clientSecret, oidcIssuer, targetPod };
+  req.session.user = {
+    email: user.email,
+    clientId,
+    clientSecret,
+    oidcIssuer,
+    targetPod,
+    firstName: user.firstName,
+    lastName: user.lastName,
+  };
 
   res.send("✅ Settings updated.");
 });
